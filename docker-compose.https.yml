@@ -1,0 +1,59 @@
+# HTTPS 배포용 오버라이드. Caddy 가 Let's Encrypt 인증서를 자동으로 발급·갱신한다.
+# 조건: 도메인의 DNS A 레코드가 이 서버를 가리키고, 80/443 포트가 열려 있어야 한다.
+#
+#   .env 에  CLOUDOPS_DOMAIN=monitor.example.com  추가
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#
+# 요청 경로와 실제 사용자 IP 전달:
+#   사용자 ──▶ Caddy(172.30.0.2) ──▶ nginx(frontend) ──▶ FastAPI(backend)
+#   1) Caddy 는 인터넷에서 온 X-Forwarded-For 를 믿지 않고(기본 동작) 자신이 본 사용자 IP 를 기록한다.
+#   2) nginx 는 "Caddy 의 고정 IP 에서 온 연결"일 때만 그 헤더를 읽어 실제 사용자 IP 를 복원한다.
+#   3) nginx 는 복원한 IP 하나만 백엔드로 넘기고, 백엔드(uvicorn)는 nginx 의 고정 IP 에서 온 헤더만 믿는다.
+#   이 구성에서는 frontend 의 포트를 호스트에 열지 않으므로 Caddy 를 거치지 않고 nginx 에 닿을 방법이 없다.
+services:
+  backend:
+    environment:
+      CLOUDOPS_COOKIE_SECURE: "true" # 세션 쿠키를 HTTPS 로만 전송
+
+  frontend:
+    ports: !reset [] # 8080 직접 공개를 끄고 Caddy 를 통해서만 접근 (Docker Compose 2.24 이상)
+    environment:
+      CLOUDOPS_TRUSTED_PROXY: ${CLOUDOPS_CADDY_IP:-172.30.0.2}/32 # 신뢰하는 프록시는 Caddy 한 대뿐
+    networks:
+      edge: {} # Caddy 와 통신. backend 와 통신하는 default 네트워크(고정 IP)는 기본 파일의 설정이 그대로 합쳐진다
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CLOUDOPS_DOMAIN: ${CLOUDOPS_DOMAIN:?.env 파일에 CLOUDOPS_DOMAIN 을 설정하세요}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # 발급받은 인증서(개인키 포함). 지우면 재발급하며, 자주 지우면 발급 횟수 제한에 걸린다
+      - caddy-config:/config
+    networks:
+      edge:
+        ipv4_address: ${CLOUDOPS_CADDY_IP:-172.30.0.2} # nginx 가 신뢰할 주소를 고정한다
+
+networks:
+  # Caddy 와 nginx 만 들어가는 전용 네트워크. 주소를 고정하려면 서브넷을 직접 지정해야 한다.
+  # 이 대역이 서버의 다른 네트워크와 겹치면 .env 의 CLOUDOPS_EDGE_SUBNET / CLOUDOPS_CADDY_IP 를 함께 바꾼다.
+  edge:
+    ipam:
+      config:
+        - subnet: ${CLOUDOPS_EDGE_SUBNET:-172.30.0.0/24}
+
+volumes:
+  caddy-data:
+  caddy-config:

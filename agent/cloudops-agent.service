@@ -1,0 +1,28 @@
+# systemd 유닛 예시 (Linux 서버에서 Agent 를 상시 실행할 때)
+#
+#   sudo useradd --system --no-create-home cloudops-agent
+#   sudo install -d /opt/cloudops-agent && sudo cp agent.py /opt/cloudops-agent/
+#   sudo python3 -m venv /opt/cloudops-agent/venv && sudo /opt/cloudops-agent/venv/bin/pip install psutil
+#   sudo install -m 600 -o root /dev/null /etc/cloudops-agent.env   # 이 파일에 아래 두 줄을 적는다
+#       CLOUDOPS_URL=https://monitor.example.com
+#       CLOUDOPS_AGENT_KEY=cops_xxxxxxxx
+#   sudo cp cloudops-agent.service /etc/systemd/system/ && sudo systemctl enable --now cloudops-agent
+[Unit]
+Description=CloudOps Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=cloudops-agent
+EnvironmentFile=/etc/cloudops-agent.env
+ExecStart=/opt/cloudops-agent/venv/bin/python /opt/cloudops-agent/agent.py
+Restart=always
+RestartSec=5
+# 최소 권한: Agent 는 읽기만 하므로 시스템을 수정할 권한을 주지 않는다
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

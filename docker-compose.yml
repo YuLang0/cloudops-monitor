@@ -1,0 +1,91 @@
+# 기본 구성 (HTTP, 이 PC 에서만 접속)
+#   .env.example 을 .env 로 복사 → CLOUDOPS_SECRET_KEY 채우기 → docker compose up -d --build
+#   접속: http://localhost:8080
+#
+# 인터넷에 공개하는 서버에서는 이 파일만 쓰지 말고 docker-compose.https.yml 을 함께 쓴다
+# (deploy/scripts/*.sh 가 자동으로 두 파일을 함께 사용한다). 자세한 순서는 docs/FREE_DEPLOY.md.
+
+# 프로젝트 이름을 고정한다. 폴더 이름이 바뀌어도 같은 데이터 볼륨(cloudops-monitor_cloudops-data)을 쓰도록.
+name: cloudops-monitor
+
+# 모든 컨테이너의 로그를 서비스당 최대 10MB × 3개로 제한 → 작은 무료 디스크가 로그로 차지 않게
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped # 컨테이너가 죽거나 서버가 재부팅되면 자동으로 다시 시작
+    logging: *default-logging
+    environment:
+      CLOUDOPS_ENVIRONMENT: production
+      CLOUDOPS_SECRET_KEY: ${CLOUDOPS_SECRET_KEY:?.env 파일에 CLOUDOPS_SECRET_KEY 를 설정하세요}
+      CLOUDOPS_DATABASE_URL: sqlite:////app/data/cloudops.db
+      CLOUDOPS_BACKGROUND_LOCK_FILE: /app/data/background.lock # 감시·데모·정리 작업을 한 프로세스만 실행
+      CLOUDOPS_DEMO_MODE: ${CLOUDOPS_DEMO_MODE:-true}
+      CLOUDOPS_ALLOW_REGISTRATION: ${CLOUDOPS_ALLOW_REGISTRATION:-true}
+      CLOUDOPS_COOKIE_SECURE: ${CLOUDOPS_COOKIE_SECURE:-false}
+      CLOUDOPS_CORS_ORIGINS: ${CLOUDOPS_CORS_ORIGINS:-}
+      CLOUDOPS_OFFLINE_AFTER_SECONDS: ${CLOUDOPS_OFFLINE_AFTER_SECONDS:-30}
+      CLOUDOPS_RETENTION_DAYS: ${CLOUDOPS_RETENTION_DAYS:-7}
+      CLOUDOPS_INCIDENT_RETENTION_DAYS: ${CLOUDOPS_INCIDENT_RETENTION_DAYS:-365}
+      # uvicorn 이 X-Forwarded-For 를 믿어 줄 상대 = nginx(frontend) 컨테이너 한 대뿐
+      FORWARDED_ALLOW_IPS: ${CLOUDOPS_NGINX_IP:-172.31.0.10}
+    volumes:
+      - cloudops-data:/app/data # 컨테이너를 지우고 다시 만들어도 설정·기록이 남는다
+    expose:
+      - "8000" # 호스트에 공개하지 않는다. frontend(nginx)만 접근한다.
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # 기본값은 127.0.0.1 → 이 컴퓨터 안에서만 접속 가능. 서버에서 실수로 HTTP 를 인터넷에 열지 않게 한다.
+      # 같은 사설망의 다른 PC 에서 HTTP 로 시험해야 할 때만 .env 에 CLOUDOPS_BIND=0.0.0.0 (공개 서버에서는 금지)
+      - "${CLOUDOPS_BIND:-127.0.0.1}:${CLOUDOPS_PORT:-8080}:80"
+    healthcheck:
+      # nginx → backend 경로 전체가 살아 있는지 확인 (DB 질의 포함)
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      default:
+        ipv4_address: ${CLOUDOPS_NGINX_IP:-172.31.0.10} # 백엔드가 신뢰할 주소를 고정한다
+
+  # 선택: 수집 경로를 시험해 보기 위한 Agent 컨테이너.
+  #   CLOUDOPS_AGENT_KEY=cops_xxx docker compose --profile agent up -d agent
+  # 컨테이너 안에서는 디스크·네트워크가 '컨테이너 기준'으로 측정된다.
+  # 실제 서버를 모니터링할 때는 README 안내대로 호스트에서 직접(systemd) 실행한다.
+  agent:
+    profiles: ["agent"]
+    build: ./agent
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - frontend
+    environment:
+      CLOUDOPS_URL: http://frontend
+      CLOUDOPS_AGENT_KEY: ${CLOUDOPS_AGENT_KEY:-}
+      CLOUDOPS_ALLOW_INSECURE: "1" # compose 내부 네트워크 구간이므로 http 허용
+      CLOUDOPS_INTERVAL: "5"
+
+networks:
+  # 컨테이너 주소를 고정하려면 서브넷을 직접 지정해야 한다.
+  # 이 대역이 서버의 다른 네트워크와 겹치면 .env 의 CLOUDOPS_APP_SUBNET / CLOUDOPS_NGINX_IP 를 함께 바꾼다.
+  default:
+    ipam:
+      config:
+        - subnet: ${CLOUDOPS_APP_SUBNET:-172.31.0.0/24}
+
+volumes:
+  # 측정값·계정·장애 이력이 들어 있는 SQLite 파일. 배포·업데이트 스크립트는 이 볼륨을 절대 지우지 않는다.
+  cloudops-data:

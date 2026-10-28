@@ -1,0 +1,158 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 색은 전부 역할(role) 토큰으로 정의하고, 테마 전환은 이 값만 바꾼다. */
+:root {
+  color-scheme: light;
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #f6f8fb;
+  --line: #dde3ec;
+  --ink: #0f1728;
+  --ink-2: #475467;
+  --ink-3: #6b778c;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --grid: #e6ebf2;
+  /* 상태색: 점·아이콘용 / 글자용(대비 확보) */
+  --ok: #0ca30c;
+  --ok-ink: #0a6b0a;
+  --warn: #e39a00;
+  --warn-ink: #8a5a00;
+  --crit: #d03b3b;
+  --crit-ink: #b42318;
+  --off: #7a8699;
+  --off-ink: #475467;
+  --demo: #6d4fc4;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #080d1a;
+  --surface: #111a2e;
+  --surface-2: #17223a;
+  --line: #233150;
+  --ink: #e8eef9;
+  --ink-2: #a6b4cc;
+  --ink-3: #7384a3;
+  --accent: #3987e5;
+  --accent-ink: #ffffff;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --grid: #1e2a45;
+  --ok: #0ca30c;
+  --ok-ink: #57d163;
+  --warn: #fab219;
+  --warn-ink: #fab219;
+  --crit: #d03b3b;
+  --crit-ink: #f47c7c;
+  --off: #7384a3;
+  --off-ink: #a6b4cc;
+  --demo: #a594f0;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-ok-ink: var(--ok-ink);
+  --color-warn: var(--warn);
+  --color-warn-ink: var(--warn-ink);
+  --color-crit: var(--crit);
+  --color-crit-ink: var(--crit-ink);
+  --color-off: var(--off);
+  --color-off-ink: var(--off-ink);
+  --color-demo: var(--demo);
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo',
+    'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-pop-in: pop-in 0.18s ease-out both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark body {
+  /* 콘솔 느낌의 은은한 남색 그라데이션 */
+  background: radial-gradient(1200px 600px at 80% -10%, #12204a55, transparent 60%), var(--bg);
+  background-attachment: fixed;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-sm transition-colors duration-200;
+  }
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-all duration-150 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-transparent bg-accent text-accent-ink hover:bg-accent hover:brightness-110;
+  }
+  .btn-danger {
+    @apply border-transparent bg-crit text-white hover:bg-crit hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-ink-2 hover:text-ink;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-3 focus:border-accent focus:outline-none;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium text-ink-2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
